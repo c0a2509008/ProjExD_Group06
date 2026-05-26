@@ -32,7 +32,7 @@ except Exception as e:
     print("[ERROR] BGM load failed:", e)
 
 # -----------------------------
-# 安全な画像読み込み関数
+# 安全な読み込み関数（画像・音声）
 # -----------------------------
 def load_image_safe(path):
     if not os.path.exists(path):
@@ -51,6 +51,21 @@ def load_image_safe(path):
         surf = pg.Surface((30, 20))
         surf.fill((255, 80, 80))
         return surf
+
+# コード1から追加：安全な音声読み込み関数
+def load_sound_safe(path):
+    if not os.path.exists(path):
+        print(f"[ERROR] Sound file not found: {path}")
+        return None
+        
+    try:
+        sound = pg.mixer.Sound(path)
+        print(f"[OK] Loaded sound: {path}")
+        return sound
+    except Exception as e:
+        print(f"[ERROR] Cannot load sound: {path}")
+        print("Reason:", e)
+        return None
 
 # -----------------------------
 # Score（スコア表示）
@@ -125,14 +140,12 @@ class Player(pg.sprite.Sprite):
         self.rect.clamp_ip(screen.get_rect())
 
     def draw_shield(self, surface):
-
         font = pg.font.Font(None, 30)
-
         txt = font.render(f"Shield: {self.shield_stock}",True,(0, 255, 255))
-
         surface.blit(txt, (10, 50))
 
-        if self.shield:pg.draw.circle(surface,(0, 255, 255),self.rect.center,40,3) # シールド描画追加
+        if self.shield:
+            pg.draw.circle(surface,(0, 255, 255),self.rect.center,40,3) # シールド描画追加
 
 # -----------------------------
 # Bullet
@@ -151,23 +164,19 @@ class Bullet(pg.sprite.Sprite):
             self.kill()
 
 # =========================================================
-# ★追加：Laser（貫通レーザー）
+# Laser（貫通レーザー）
 # =========================================================
 class Laser(pg.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-
         # レーザー画像
         self.image = pg.Surface((120, 12))
         self.image.fill((0, 255, 255))
-
         self.rect = self.image.get_rect(midleft=(x, y))
-
         self.speed = 18
 
     def update(self):
         self.rect.x += self.speed
-
         if self.rect.left > WIDTH:
             self.kill()     
 
@@ -177,11 +186,10 @@ class Laser(pg.sprite.Sprite):
 class Enemy(pg.sprite.Sprite):
     def __init__(self):
         super().__init__()
-
         # 画像読み込み
         self.image = load_image_safe("fig/enemy.png")
 
-        # 自動縮小（40%）
+        # 自動縮小（40%）※コード2の設定を優先
         w, h = self.image.get_size()
         self.image = pg.transform.smoothscale(self.image, (int(w*0.1), int(h*0.1)))
 
@@ -220,10 +228,6 @@ class ChaserEnemy(pg.sprite.Sprite):
         self.speed_y = 1
 
     def update(self, player_rect: pg.Rect):
-        """
-        追従型敵の更新
-        引数: player_rect (pg.Rect)
-        """
         if player_rect.centery < self.rect.centery: # Playerが上にいる → 敵は上に移動
             self.rect.y -= self.speed_y
         elif player_rect.centery > self.rect.centery:   # Playerが下にいる → 敵は下に移動
@@ -255,15 +259,11 @@ class WavyEnemy(pg.sprite.Sprite):
         self.wave_amp = 50
 
     def update(self):
-        """
-        うねうねする敵の更新
-        """
         self.rect.x -= self.speed
         self.angle += self.wave_speed
         self.rect.y = self.base_y + math.sin(self.angle) * self.wave_amp
         if self.rect.right < 0:
             self.kill()
-
 
 # -----------------------------
 # PowerUp（パワーアップアイテム）
@@ -274,7 +274,6 @@ class PowerUp(pg.sprite.Sprite):
         self.image = pg.Surface((20, 20))
         self.image.fill((0, 255, 255))  # 水色のアイテム
         self.rect = self.image.get_rect()
-
         self.rect.x = WIDTH + random.randint(0, 200)
         self.rect.y = random.randint(50, HEIGHT - 50)
         self.speed = 3
@@ -283,7 +282,6 @@ class PowerUp(pg.sprite.Sprite):
         self.rect.x -= self.speed
         if self.rect.right < 0:
             self.kill()
-
 
 class PowerUp3Way(pg.sprite.Sprite):
     def __init__(self):
@@ -291,7 +289,6 @@ class PowerUp3Way(pg.sprite.Sprite):
         self.image = pg.Surface((20, 20))
         self.image.fill((255, 100, 0))  # オレンジ色のアイテム
         self.rect = self.image.get_rect()
-
         self.rect.x = WIDTH + random.randint(0, 200)
         self.rect.y = random.randint(50, HEIGHT - 50)
         self.speed = 3
@@ -300,7 +297,6 @@ class PowerUp3Way(pg.sprite.Sprite):
         self.rect.x -= self.speed
         if self.rect.right < 0:
             self.kill()
-
 
 # -----------------------------
 # Background scroll
@@ -314,19 +310,17 @@ def draw_background(scroll_x):
     for x, y in stars:
         pg.draw.circle(screen, (200, 200, 255), ((x - scroll_x) % WIDTH, y), 2)
 
-powerup_group = pg.sprite.Group()
-powerup_timer = 0
-powerup_active = False
-powerup_end_time = 0
-threeway_group = pg.sprite.Group()
-threeway_timer = 0
+# -----------------------------
+# アセットの読み込み（天国画像＆ゲームオーバーSE）※コード1から追加
+# -----------------------------
+heaven_raw = load_image_safe("fig/heaven.png")
+heaven_img = pg.transform.smoothscale(heaven_raw, (WIDTH, HEIGHT))
+gameover_se = load_sound_safe("BGM/heaven.wav")
 
-threeway_active = False 
-threeway_end_time = 0
-
-# 連射間隔（通常：15フレーム）
-shot_interval = 15
-shot_timer = 0
+fade_surface = pg.Surface((WIDTH, HEIGHT))
+fade_surface.fill((255, 255, 255))
+fade_timer = 0
+heaven_timer = 0
 
 # -----------------------------
 # Main Game Loop
@@ -338,192 +332,229 @@ enemy_group = pg.sprite.Group()
 chaser_enemy_group = pg.sprite.Group()    # 追従型敵グループ
 wavy_enemy_group = pg.sprite.Group()    # うねうね敵グループ
 laser_group = pg.sprite.Group()  # レーザーグループ追加
-score = Score()  # ★ スコア追加
+powerup_group = pg.sprite.Group()
+threeway_group = pg.sprite.Group()
 
+score = Score()
 
 enemy_spawn_timer = 0
 scroll_x = 0
-game_over = False
-font = pg.font.Font(None, 80)
 
-laser_cooldown = 0  # レーザーのクールダウンタイマー
+# コード1の状態管理を復活
+game_state = "playing" 
+font = pg.font.Font(None, 80)
+font_small = pg.font.Font(None, 40)
+
+powerup_timer = 0
+powerup_active = False
+powerup_end_time = 0
+threeway_timer = 0
+threeway_active = False 
+threeway_end_time = 0
+
+# 連射間隔
+shot_interval = 15
+shot_timer = 0
+laser_cooldown = 0  
 
 while True:
     for ev in pg.event.get():
         if ev.type == pg.QUIT:
             pg.quit()
             sys.exit()
-        if not game_over and ev.type == pg.KEYDOWN:
-            if ev.key == pg.K_SPACE:
-                if shot_timer <= 0:
-                    bullet_speed = 10
+            
+        if ev.type == pg.KEYDOWN:
+            # プレイ中のキー操作
+            if game_state == "playing":
+                if ev.key == pg.K_SPACE:
+                    if shot_timer <= 0:
+                        bullet_speed = 10
+                        if threeway_active:
+                            bullet_group.add(Bullet(player.rect.right, player.rect.centery, bullet_speed))
+                            bullet_group.add(Bullet(player.rect.right, player.rect.centery - 15, bullet_speed))
+                            bullet_group.add(Bullet(player.rect.right, player.rect.centery + 15, bullet_speed))
+                        else:
+                            bullet_group.add(Bullet(player.rect.right, player.rect.centery, bullet_speed))
+                        shot_timer = shot_interval
+                        
+                elif ev.key == pg.K_x and laser_cooldown <= 0:
+                    laser_group.add(Laser(player.rect.right, player.rect.centery))
+                    laser_cooldown = 60
+                    
+                if ev.key == pg.K_s:
+                    if player.shield_stock > 0 and not player.shield:
+                        player.shield = True
+                        player.shield_stock -= 1
 
-                    if threeway_active:
-                        # ★★★ 3WAYショット ★★★
-                        bullet_group.add(Bullet(player.rect.right, player.rect.centery, bullet_speed))
-                        bullet_group.add(Bullet(player.rect.right, player.rect.centery - 15, bullet_speed))
-                        bullet_group.add(Bullet(player.rect.right, player.rect.centery + 15, bullet_speed))
-                    else:
-                        # 通常ショット
-                        bullet_group.add(Bullet(player.rect.right, player.rect.centery, bullet_speed))
+            # ゲームオーバー中のエンターキー（コンティニュー）※コード1から追加
+            elif game_state == "gameover":
+                if ev.key == pg.K_RETURN:  # Enterキー
+                    if gameover_se:
+                        gameover_se.stop()
+                    
+                    # BGM再開
+                    try:
+                        pg.mixer.music.play(-1)
+                    except:
+                        pass
 
-                    shot_timer = shot_interval
-            elif ev.key == pg.K_x and laser_cooldown <= 0:  # xキーでレーザー発射
-                laser_group.add(Laser(player.rect.right, player.rect.centery))
-                laser_cooldown = 60  # 1秒のクールダウン
+                    # ゲーム状態をリセット
+                    game_state = "playing"
+                    score.value = 0
+                    scroll_x = 0
+                    enemy_spawn_timer = 0
+                    player.rect.center = (100, HEIGHT // 2)
+                    player.shield = False
+                    player.shield_stock = 3
+                    
+                    # 画面上のエンティティを消去
+                    enemy_group.empty()
+                    chaser_enemy_group.empty()
+                    wavy_enemy_group.empty()
+                    bullet_group.empty()
+                    laser_group.empty()
+                    powerup_group.empty()
+                    threeway_group.empty()
+                    
+                    powerup_active = False
+                    threeway_active = False
+                    shot_interval = 15
 
-            if ev.key == pg.K_s:  # sキーでシールドON/OFF
-                if player.shield_stock > 0 and not player.shield:  # シールドストックがあって、現在シールドがない場合
-                    player.shield = True
-                    player.shield_stock -= 1
-
-    if not game_over:
+    # --- 更新処理 ---
+    if game_state == "playing":
         scroll_x += 3
 
-        # レーザークールダウン減少
         if laser_cooldown > 0:
             laser_cooldown -= 1
-
-        enemy_spawn_timer += 1
-        if enemy_spawn_timer > 40:
-            spawn_chance = random.random()
-            if spawn_chance < 0.6:  # 80%の確率で通常敵を追加
-                enemy_group.add(Enemy())
-            elif spawn_chance < 0.8:  # 20%の確率で追従型敵を追加
-                chaser_enemy_group.add(ChaserEnemy())
-            else:  # 20%の確率でうねうね敵を追加
-                wavy_enemy_group.add(WavyEnemy())
-            enemy_spawn_timer = 0
-
-        player_group.update()
-        bullet_group.update()
-        laser_group.update()  # レーザーも更新
-        enemy_group.update()
-
-
-          # 連射タイマー
         if shot_timer > 0:
             shot_timer -= 1
 
-        # パワーアップ出現
+        # 敵の出現
+        enemy_spawn_timer += 1
+        if enemy_spawn_timer > 40:
+            spawn_chance = random.random()
+            if spawn_chance < 0.6:
+                enemy_group.add(Enemy())
+            elif spawn_chance < 0.8:
+                chaser_enemy_group.add(ChaserEnemy())
+            else:
+                wavy_enemy_group.add(WavyEnemy())
+            enemy_spawn_timer = 0
+
+        # パワーアップアイテムの出現
         powerup_timer += 1
-        if powerup_timer > 300:  # 5秒に1回くらい
+        if powerup_timer > 300:
             powerup_group.add(PowerUp())
             powerup_timer = 0
-
-        powerup_group.update()
-
-
-         # 3WAYアイテム出現
+            
         threeway_timer += 1
-        if threeway_timer > 500:  # 出現頻度は調整可
+        if threeway_timer > 500:
             threeway_group.add(PowerUp3Way())
             threeway_timer = 0
 
+        # グループの更新
+        player_group.update()
+        bullet_group.update()
+        laser_group.update()
+        enemy_group.update()
+        chaser_enemy_group.update(player.rect)
+        wavy_enemy_group.update()
+        powerup_group.update()
         threeway_group.update()
 
-
-        # プレイヤーがパワーアップ取得
+        # パワーアップ取得処理
         if pg.sprite.spritecollide(player, powerup_group, True):
             powerup_active = True
-            shot_interval = 1  # ★ 連射速度アップ！
-            powerup_end_time = pg.time.get_ticks() + 8000  # 8秒間
-
-        
-        # 3WAYアイテム取得
+            shot_interval = 1 
+            powerup_end_time = pg.time.get_ticks() + 8000
+            
         if pg.sprite.spritecollide(player, threeway_group, True):   
             threeway_active = True
-            threeway_end_time = pg.time.get_ticks() + 8000  # 8秒間
+            threeway_end_time = pg.time.get_ticks() + 8000
 
-
-        # 効果時間が切れたら戻す
+        # パワーアップ終了処理
         if powerup_active and pg.time.get_ticks() > powerup_end_time:
             powerup_active = False
             shot_interval = 15
-
-
-         # 3WAY効果終了
         if threeway_active and pg.time.get_ticks() > threeway_end_time:
             threeway_active = False
 
+        # --- 当たり判定（プレイヤー VS 敵）---
+        # 関数にまとめて処理
+        def handle_player_hit():
+            global game_state, fade_timer
+            if player.shield:
+                player.shield = False
+            else:
+                game_state = "fading"
+                fade_timer = 0
+                pg.mixer.music.stop() # BGM停止
 
-
-        chaser_enemy_group.update(player.rect)
-        wavy_enemy_group.update()
-
-        # 敵と衝突 → ゲームオーバー シールド判定追加、被弾処理変更
-        # 通常敵と衝突
         if pg.sprite.spritecollide(player, enemy_group, True):
-
-            # シールドあり
-            if player.shield:
-                player.shield = False
-
-            # シールドなし
-            else:
-                game_over = True
-                pg.mixer.music.stop()
-
-        # 追従敵と衝突
+            handle_player_hit()
         if pg.sprite.spritecollide(player, chaser_enemy_group, True):
-
-            if player.shield:
-                player.shield = False
-
-            else:
-                game_over = True
-                pg.mixer.music.stop()
-
-        # うねうね敵と衝突
+            handle_player_hit()
         if pg.sprite.spritecollide(player, wavy_enemy_group, True):
+            handle_player_hit()
 
-            if player.shield:
-                player.shield = False
-
-            else:
-                game_over = True
-                pg.mixer.music.stop()
-        # 弾が敵に当たったらスコア加算
+        # --- 当たり判定（攻撃 VS 敵）---
         hits = pg.sprite.groupcollide(bullet_group, enemy_group, True, True)
-        if hits:
-            score.add(100)
+        if hits: score.add(100)
         hits2 = pg.sprite.groupcollide(bullet_group, chaser_enemy_group, True, True)
-        if hits2:
-            score.add(50)
+        if hits2: score.add(50)
         hits3 = pg.sprite.groupcollide(bullet_group, wavy_enemy_group, True, True)
-        if hits3:
-            score.add(150)
-        # レーザーが敵に当たったらスコア加算
+        if hits3: score.add(150)
+        
         laser_hits = pg.sprite.groupcollide(laser_group, enemy_group, False, True)
-        if laser_hits:
-            score.add(100)
+        if laser_hits: score.add(100)
         laser_hits2 = pg.sprite.groupcollide(laser_group, chaser_enemy_group, False, True)
-        if laser_hits2:
-            score.add(50)
+        if laser_hits2: score.add(50)
         laser_hits3 = pg.sprite.groupcollide(laser_group, wavy_enemy_group, False, True)
-        if laser_hits3:
-            score.add(150)
+        if laser_hits3: score.add(150)
 
-    draw_background(scroll_x)
-    player_group.draw(screen)
-    player.draw_shield(screen)  # シールド描画
-    bullet_group.draw(screen)
-    laser_group.draw(screen) # レーザー描画
-    enemy_group.draw(screen)
-    chaser_enemy_group.draw(screen)  # 追従型敵の描画
-    wavy_enemy_group.draw(screen)  # うねうね敵の描画
-    powerup_group.draw(screen)
-    threeway_group.draw(screen)
-    score.draw(screen)  # ★ スコア表示
+    # --- 描画処理 ---
+    if game_state in ["playing", "fading"]:
+        draw_background(scroll_x)
+        player_group.draw(screen)
+        player.draw_shield(screen)
+        bullet_group.draw(screen)
+        laser_group.draw(screen)
+        enemy_group.draw(screen)
+        chaser_enemy_group.draw(screen)
+        wavy_enemy_group.draw(screen)
+        powerup_group.draw(screen)
+        threeway_group.draw(screen)
+        score.draw(screen)
 
-    if game_over:
+    # --- ゲームオーバー演出（コード1より復活） ---
+    if game_state == "fading":
+        fade_timer += 1
+        alpha = int(255 * (fade_timer / 120))
+        if alpha >= 255:
+            alpha = 255
+            game_state = "heaven" 
+            heaven_timer = 0
+            
+            # 天国の画面に切り替わった瞬間にSEを再生
+            if gameover_se:
+                gameover_se.play()
+                
+        fade_surface.set_alpha(alpha)
+        screen.blit(fade_surface, (0, 0))
+
+    elif game_state == "heaven":
+        screen.blit(heaven_img, (0, 0))
+        heaven_timer += 1
+        if heaven_timer >= 120: 
+            game_state = "gameover"
+
+    elif game_state == "gameover":
+        screen.blit(heaven_img, (0, 0))
         txt = font.render("GAME OVER", True, (255, 0, 0))
-        screen.blit(txt, (WIDTH // 2 - 180, HEIGHT // 2 - 40))
+        screen.blit(txt, (WIDTH // 2 - 180, HEIGHT // 2 - 60))
+        
+        txt_continue = font_small.render("Press ENTER to Continue", True, (0, 0, 0))
+        screen.blit(txt_continue, (WIDTH // 2 - 170, HEIGHT // 2 + 20))
 
     pg.display.update()
-    main_clock.tick(60) 
-
-
-
-
-
+    main_clock.tick(60)
